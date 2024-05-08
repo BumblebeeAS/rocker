@@ -142,6 +142,60 @@ class Nvidia(RockerExtension):
             default=defaults.get(Nvidia.get_name(), None),
             help="Enable nvidia. Default behavior is to pick flag based on docker version.")
 
+class TRT(RockerExtension):
+    @staticmethod
+    def get_name():
+        return 'trt'
+
+    def __init__(self):
+        self._env_subs = None
+        self.name = TRT.get_name()
+        self.supported_distros = ['Ubuntu', 'Debian GNU/Linux']
+        self.supported_versions = ['16.04', '18.04', '20.04', '10', '22.04']
+
+
+    def get_environment_subs(self, cliargs={}):
+        if not self._env_subs:
+            self._env_subs = {}
+            self._env_subs['user_id'] = os.getuid()
+            self._env_subs['username'] = getpass.getuser()
+        
+        # non static elements test every time
+        detected_os = detect_os(cliargs['base_image'], print, nocache=cliargs.get('nocache', False))
+        if detected_os is None:
+            print("WARNING unable to detect os for base image '%s', maybe the base image does not exist" % cliargs['base_image'])
+            sys.exit(1)
+        dist, ver, codename = detected_os
+
+        self._env_subs['image_distro_id'] = dist
+        if self._env_subs['image_distro_id'] not in self.supported_distros:
+            print("WARNING distro id %s not supported by Nvidia supported " % self._env_subs['image_distro_id'], self.supported_distros)
+            sys.exit(1)
+        self._env_subs['image_distro_version'] = ver
+        if self._env_subs['image_distro_version'] not in self.supported_versions:
+            print("WARNING distro %s version %s not in supported list by Nvidia supported versions" % (dist, ver), self.supported_versions)
+            sys.exit(1)
+            # TODO(tfoote) add a standard mechanism for checking preconditions and disabling plugins
+
+        return self._env_subs
+
+    def get_preamble(self, cliargs):
+        return ""
+
+    def get_snippet(self, cliargs):
+        snippet = pkgutil.get_data('rocker', 'templates/%s_snippet.Dockerfile.em' % self.name).decode('utf-8')
+        return empy_expand(snippet, self.get_environment_subs(cliargs))
+
+    def get_docker_args(self, cliargs):
+        return ""
+
+    @staticmethod
+    def register_arguments(parser, defaults={}):
+        parser.add_argument(name_to_argument(TRT.get_name()),
+            action='store_true',
+            default=defaults.get('trt', None),
+            help="Install nvidia-tensorrt into the container")
+
 class Cuda(RockerExtension):
     @staticmethod
     def get_name():
